@@ -76,6 +76,65 @@ Or if installed globally:
 ghost-mcp-server-featured-image
 ```
 
+## Content Formats
+
+Ghost uses **Lexical** as its rich text format. The `lexical` parameter accepts a JSON string.
+
+### Using Markdown in Lexical
+
+The easiest way to write content is using a markdown card inside lexical:
+
+```json
+{
+  "root": {
+    "children": [{
+      "type": "markdown",
+      "version": 1,
+      "markdown": "## Your Heading\n\nYour paragraph with **bold** and *italic* text.\n\n- List item 1\n- List item 2\n\n[Link text](https://example.com)"
+    }],
+    "direction": null,
+    "format": "",
+    "indent": 0,
+    "type": "root",
+    "version": 1
+  }
+}
+```
+
+### Plain Text Paragraph
+
+For simple text without markdown:
+
+```json
+{
+  "root": {
+    "children": [{
+      "children": [{
+        "detail": 0,
+        "format": 0,
+        "mode": "normal",
+        "style": "",
+        "text": "Your paragraph text here.",
+        "type": "text",
+        "version": 1
+      }],
+      "direction": "ltr",
+      "format": "",
+      "indent": 0,
+      "type": "paragraph",
+      "version": 1
+    }],
+    "direction": "ltr",
+    "format": "",
+    "indent": 0,
+    "type": "root",
+    "version": 1
+  }
+}
+```
+
+**Note:** The `lexical` parameter must be a JSON **string** (use `JSON.stringify()`), not a JSON object.
+
 ## Available Tools
 
 ### get_posts
