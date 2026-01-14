@@ -96,11 +96,23 @@ Creates a new post.
 Input:
 ```json
 {
-  "title": "string",     // Required: Post title
-  "html": "string",      // Optional: HTML content
-  "lexical": "string",   // Optional: Lexical content
-  "status": "string",    // Optional: Post status (published/draft/scheduled)
-  "visibility": "string" // Optional: Visibility level (public/members/paid/tiers)
+  "title": "string",              // Required: Post title
+  "html": "string",               // Optional: HTML content
+  "lexical": "string",            // Optional: Lexical content (recommended)
+  "status": "string",             // Optional: Post status (published/draft/scheduled)
+  "visibility": "string",         // Optional: Visibility level (public/members/paid/tiers)
+  "tags": ["string"],             // Optional: Array of tag names
+  "authors": ["string"],          // Optional: Array of author IDs
+  "featured": "boolean",          // Optional: Set as featured post
+  "feature_image": "string",      // Optional: Featured image URL (upload via upload_image_from_url first)
+  "feature_image_alt": "string",  // Optional: Alt text for featured image
+  "feature_image_caption": "string", // Optional: Caption for featured image
+  "custom_excerpt": "string",     // Optional: Custom excerpt (max 300 characters)
+  "custom_template": "string",    // Optional: Custom template name (e.g., custom-post-fullwidth)
+  "email_subject": "string",      // Optional: Email subject line
+  "email_only": "boolean",        // Optional: Email-only post
+  "newsletter": "boolean",        // Optional: Whether to send email
+  "published_at": "string"        // Optional: Publication date (for scheduled posts)
 }
 ```
 
@@ -110,11 +122,24 @@ Updates an existing post.
 Input:
 ```json
 {
-  "id": "string",       // Required: Post ID
-  "title": "string",    // Optional: Post title
-  "html": "string",     // Optional: HTML content
-  "lexical": "string",  // Optional: Lexical content
-  "status": "string"    // Optional: Post status
+  "id": "string",                 // Required: Post ID
+  "title": "string",              // Optional: Post title
+  "html": "string",               // Optional: HTML content
+  "lexical": "string",            // Optional: Lexical content (recommended)
+  "status": "string",             // Optional: Post status (published/draft/scheduled)
+  "visibility": "string",         // Optional: Visibility level (public/members/paid/tiers)
+  "tags": ["string"],             // Optional: Array of tag names (replaces existing)
+  "authors": ["string"],          // Optional: Array of author IDs (replaces existing)
+  "featured": "boolean",          // Optional: Set as featured post
+  "feature_image": "string",      // Optional: Featured image URL
+  "feature_image_alt": "string",  // Optional: Alt text for featured image
+  "feature_image_caption": "string", // Optional: Caption for featured image
+  "custom_excerpt": "string",     // Optional: Custom excerpt (max 300 characters)
+  "custom_template": "string",    // Optional: Custom template name (e.g., custom-post-fullwidth)
+  "email_subject": "string",      // Optional: Email subject line
+  "email_only": "boolean",        // Optional: Email-only post
+  "newsletter": "boolean",        // Optional: Whether to send email
+  "published_at": "string"        // Optional: Publication date (for scheduled posts)
 }
 ```
 
