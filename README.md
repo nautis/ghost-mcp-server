@@ -1,6 +1,6 @@
-# Ghost MCP Server
+# Ghost MCP Server (Featured Image Fork)
 
-A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. This server enables programmatic access to Ghost CMS features including post management, page management, member management, and more.
+A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. This is a fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with additional features.
 
 ## Features
 
@@ -11,6 +11,12 @@ A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. 
 - Member Management (create, read, update, delete, search)
 - Image Upload (Base64 and URL-based)
 
+### Additional Features (this fork)
+- **Featured Image Support** - `feature_image`, `feature_image_alt`, `feature_image_caption`
+- **Custom Excerpt** - `custom_excerpt` field for post summaries
+- **Custom Template** - `custom_template` field for post templates
+- **Fixed update_post** - Properly handles Ghost's optimistic locking
+
 ## Prerequisites
 
 - Node.js (v18 or higher recommended)
@@ -19,10 +25,18 @@ A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. 
 
 ## Installation
 
-Install the package using npm:
+Clone and install from GitHub:
 
 ```bash
-npm install @densh/ghost-mcp-server
+git clone https://github.com/nautis/ghost-mcp-server.git
+cd ghost-mcp-server
+npm install
+```
+
+Or install globally:
+
+```bash
+npm install -g github:nautis/ghost-mcp-server
 ```
 
 ## Configuration
@@ -53,7 +67,13 @@ GHOST_ADMIN_API_KEY=your_admin_api_key
 After installation, start the server with:
 
 ```bash
-npx @densh/ghost-mcp-server
+node build/index.js
+```
+
+Or if installed globally:
+
+```bash
+ghost-mcp-server-featured-image
 ```
 
 ## Available Tools
