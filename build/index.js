@@ -60,7 +60,7 @@ class GhostServer {
                         }
                         return getAuthors(args);
                     case 'create_post': {
-                        const { title, html, lexical, status, visibility, published_at, tags, authors, featured, email_subject, email_only, newsletter, feature_image, feature_image_alt, feature_image_caption } = args;
+                        const { title, html, lexical, status, visibility, published_at, tags, authors, featured, email_subject, email_only, newsletter, feature_image, feature_image_alt, feature_image_caption, custom_excerpt, custom_template } = args;
                         if (!title || typeof title !== 'string') {
                             throw new McpError(ErrorCode.InvalidParams, 'Title is required and must be a string');
                         }
@@ -80,10 +80,12 @@ class GhostServer {
                             feature_image: typeof feature_image === 'string' ? feature_image : undefined,
                             feature_image_alt: typeof feature_image_alt === 'string' ? feature_image_alt : undefined,
                             feature_image_caption: typeof feature_image_caption === 'string' ? feature_image_caption : undefined,
+                            custom_excerpt: typeof custom_excerpt === 'string' ? custom_excerpt : undefined,
+                            custom_template: typeof custom_template === 'string' ? custom_template : undefined,
                         });
                     }
                     case 'update_post': {
-                        const { id, title, html, lexical, status, visibility, published_at, tags, authors, featured, email_subject, email_only, newsletter, feature_image, feature_image_alt, feature_image_caption } = args;
+                        const { id, title, html, lexical, status, visibility, published_at, tags, authors, featured, email_subject, email_only, newsletter, feature_image, feature_image_alt, feature_image_caption, custom_excerpt, custom_template } = args;
                         if (typeof id !== 'string') {
                             throw new McpError(ErrorCode.InvalidParams, 'ID must be a string');
                         }
@@ -104,7 +106,8 @@ class GhostServer {
                             feature_image: typeof feature_image === 'string' ? feature_image : undefined,
                             feature_image_alt: typeof feature_image_alt === 'string' ? feature_image_alt : undefined,
                             feature_image_caption: typeof feature_image_caption === 'string' ? feature_image_caption : undefined,
-                            updated_at: new Date().toISOString(),
+                            custom_excerpt: typeof custom_excerpt === 'string' ? custom_excerpt : undefined,
+                            custom_template: typeof custom_template === 'string' ? custom_template : undefined,
                         });
                     }
                     case 'delete_post': {

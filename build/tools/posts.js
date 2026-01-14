@@ -152,6 +152,14 @@ export const createPostSchema = {
             feature_image_caption: {
                 type: 'string',
                 description: 'Caption for the featured image'
+            },
+            custom_excerpt: {
+                type: 'string',
+                description: 'Custom excerpt for the post (max 300 characters)'
+            },
+            custom_template: {
+                type: 'string',
+                description: 'Custom template name (e.g., custom-post-fullwidth)'
             }
         },
         required: ['title']
@@ -234,6 +242,14 @@ export const updatePostSchema = {
             feature_image_caption: {
                 type: 'string',
                 description: 'Caption for the featured image'
+            },
+            custom_excerpt: {
+                type: 'string',
+                description: 'Custom excerpt for the post (max 300 characters)'
+            },
+            custom_template: {
+                type: 'string',
+                description: 'Custom template name (e.g., custom-post-fullwidth)'
             }
         },
         required: ['id']
@@ -402,10 +418,9 @@ export const createPost = async (params) => {
 };
 export const updatePost = async ({ id, ...params }) => {
     try {
-        // updated_at is required
-        if (!params.updated_at) {
-            params.updated_at = new Date().toISOString();
-        }
+        // Fetch current post to get updated_at for optimistic locking
+        const currentPost = await ghostApi.posts.read({ id });
+        params.updated_at = currentPost.updated_at;
         const post = await ghostApi.posts.edit({ id, ...params });
         return {
             content: [
