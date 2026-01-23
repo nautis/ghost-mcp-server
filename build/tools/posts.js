@@ -1,5 +1,6 @@
 import { handleGhostApiError } from '../utils/error.js';
 import { createGhostApi } from '../config/config.js';
+import { sanitizeHtmlContent } from '../utils/sanitize.js';
 const ghostApi = createGhostApi();
 export const getPostsSchema = {
     name: 'get_posts',
@@ -45,6 +46,10 @@ export const getPostsSchema = {
                     type: 'string',
                     enum: ['authors', 'tags']
                 }
+            },
+            filter: {
+                type: 'string',
+                description: 'Filter expression using Ghost filter syntax (e.g., "authors.slug:matthew", "tags.slug:reviews", "authors.slug:matthew+tags.slug:reviews")'
             }
         }
     },
@@ -330,12 +335,16 @@ export const searchPostsSchema = {
                     type: 'string',
                     enum: ['authors', 'tags']
                 }
+            },
+            filter: {
+                type: 'string',
+                description: 'Filter expression using Ghost filter syntax (e.g., "authors.slug:matthew", "tags.slug:reviews", "authors.slug:matthew+tags.slug:reviews")'
             }
         },
         required: ['query']
     },
 };
-export const getPosts = async ({ limit = 10, page = 1, order, formats, include }) => {
+export const getPosts = async ({ limit = 10, page = 1, order, formats, include, filter }) => {
     try {
         const params = { limit, page };
         if (order)
@@ -344,6 +353,8 @@ export const getPosts = async ({ limit = 10, page = 1, order, formats, include }
             params.formats = formats.join(',');
         if (include?.length)
             params.include = include.join(',');
+        if (filter)
+            params.filter = filter;
         const posts = await ghostApi.posts.browse(params);
         return {
             content: [
@@ -379,13 +390,15 @@ export const getPost = async ({ id, formats, include }) => {
         throw handleGhostApiError(error);
     }
 };
-export const searchPosts = async ({ query, limit = 10, formats, include }) => {
+export const searchPosts = async ({ query, limit = 10, formats, include, filter }) => {
     try {
         const params = { limit, search: query };
         if (formats?.length)
             params.formats = formats.join(',');
         if (include?.length)
             params.include = include.join(',');
+        if (filter)
+            params.filter = filter;
         const posts = await ghostApi.posts.browse(params);
         return {
             content: [
@@ -402,6 +415,10 @@ export const searchPosts = async ({ query, limit = 10, formats, include }) => {
 };
 export const createPost = async (params) => {
     try {
+        // Sanitize HTML content to prevent XSS
+        if (params.html) {
+            params.html = sanitizeHtmlContent(params.html);
+        }
         const post = await ghostApi.posts.add(params);
         return {
             content: [
@@ -418,10 +435,16 @@ export const createPost = async (params) => {
 };
 export const updatePost = async ({ id, ...params }) => {
     try {
+        // Sanitize HTML content to prevent XSS
+        if (params.html) {
+            params.html = sanitizeHtmlContent(params.html);
+        }
         // Fetch current post to get updated_at for optimistic locking
         const currentPost = await ghostApi.posts.read({ id });
         params.updated_at = currentPost.updated_at;
-        const post = await ghostApi.posts.edit({ id, ...params });
+        // If html is provided, use source: 'html' to tell Ghost to convert it
+        const options = params.html ? { source: 'html' } : {};
+        const post = await ghostApi.posts.edit({ id, ...params }, options);
         return {
             content: [
                 {

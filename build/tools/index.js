@@ -531,6 +531,42 @@ export const toolSchemas = [
             required: ['slug']
         }
     },
+    {
+        name: 'search_pages',
+        description: 'Search pages by title or content',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: 'Search keyword'
+                },
+                limit: {
+                    type: 'number',
+                    description: 'Number of pages to retrieve (default: 10)',
+                    minimum: 1,
+                    maximum: 100
+                },
+                formats: {
+                    type: 'array',
+                    description: 'Content formats to retrieve',
+                    items: {
+                        type: 'string',
+                        enum: ['html', 'mobiledoc', 'lexical']
+                    }
+                },
+                include: {
+                    type: 'array',
+                    description: 'Related data to include',
+                    items: {
+                        type: 'string',
+                        enum: ['authors', 'tags']
+                    }
+                }
+            },
+            required: ['query']
+        }
+    },
     // Members
     {
         name: 'get_members',

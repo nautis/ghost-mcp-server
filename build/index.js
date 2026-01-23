@@ -2,7 +2,10 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError, } from '@modelcontextprotocol/sdk/types.js';
-import { getPost, getPosts, searchPosts, createPost, updatePost, deletePost, getPostBySlug, getPage, getPages, createPage, updatePage, deletePage, getPageBySlug, getTags, getAuthors, getMember, getMembers, searchMembers, createMember, updateMember, deleteMember, uploadImage, uploadImageFromUrl, toolSchemas } from './tools/index.js';
+import { getPost, getPosts, searchPosts, createPost, updatePost, deletePost, getPostBySlug, getPage, getPages, searchPages, createPage, updatePage, deletePage, getPageBySlug, getTags, getAuthors, getMember, getMembers, searchMembers, createMember, updateMember, deleteMember, uploadImage, uploadImageFromUrl, toolSchemas } from './tools/index.js';
+// Redirect console.log to stderr for MCP stdio transport compatibility
+const originalConsoleLog = console.log;
+console.log = (...args) => console.error(...args);
 import { isPaginationParams, isSearchParams, isMemberPaginationParams, isMemberSearchParams, isCreateMemberParams, isUpdateMemberParams, isImageUploadParams, isImageUrlUploadParams } from './types/index.js';
 const isPostStatus = (value) => ['published', 'draft', 'scheduled'].includes(value);
 const isPostVisibility = (value) => ['public', 'members', 'paid', 'tiers'].includes(value);
@@ -191,6 +194,18 @@ class GhostServer {
                         }
                         return getPageBySlug({
                             slug,
+                            formats: Array.isArray(formats) ? formats.filter((f) => typeof f === 'string' && ['html', 'mobiledoc', 'lexical'].includes(f)) : undefined,
+                            include: Array.isArray(include) ? include.filter((i) => typeof i === 'string' && ['authors', 'tags'].includes(i)) : undefined,
+                        });
+                    }
+                    case 'search_pages': {
+                        const { query, limit, formats, include } = args;
+                        if (typeof query !== 'string') {
+                            throw new McpError(ErrorCode.InvalidParams, 'Query must be a string');
+                        }
+                        return searchPages({
+                            query,
+                            limit: typeof limit === 'number' ? limit : undefined,
                             formats: Array.isArray(formats) ? formats.filter((f) => typeof f === 'string' && ['html', 'mobiledoc', 'lexical'].includes(f)) : undefined,
                             include: Array.isArray(include) ? include.filter((i) => typeof i === 'string' && ['authors', 'tags'].includes(i)) : undefined,
                         });

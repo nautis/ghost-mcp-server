@@ -1,5 +1,6 @@
 import { handleGhostApiError } from '../utils/error.js';
 import { createGhostApi } from '../config/config.js';
+import { sanitizeHtmlContent } from '../utils/sanitize.js';
 const ghostApi = createGhostApi();
 export const getPagesSchema = {
     name: 'get_pages',
@@ -45,6 +46,10 @@ export const getPagesSchema = {
                     type: 'string',
                     enum: ['authors', 'tags']
                 }
+            },
+            filter: {
+                type: 'string',
+                description: 'Filter expression using Ghost filter syntax (e.g., "authors.slug:matthew", "tags.slug:reviews", "authors.slug:matthew+tags.slug:reviews")'
             }
         }
     },
@@ -205,6 +210,42 @@ export const deletePageSchema = {
         required: ['id']
     }
 };
+export const searchPagesSchema = {
+    name: 'search_pages',
+    description: 'Search pages by title or content',
+    inputSchema: {
+        type: 'object',
+        properties: {
+            query: {
+                type: 'string',
+                description: 'Search keyword'
+            },
+            limit: {
+                type: 'number',
+                description: 'Number of pages to retrieve (default: 10)',
+                minimum: 1,
+                maximum: 100
+            },
+            formats: {
+                type: 'array',
+                description: 'Content formats to retrieve',
+                items: {
+                    type: 'string',
+                    enum: ['html', 'mobiledoc', 'lexical']
+                }
+            },
+            include: {
+                type: 'array',
+                description: 'Related data to include',
+                items: {
+                    type: 'string',
+                    enum: ['authors', 'tags']
+                }
+            }
+        },
+        required: ['query']
+    }
+};
 export const getPageBySlugSchema = {
     name: 'get_page_by_slug',
     description: 'Get a page by slug',
@@ -235,7 +276,7 @@ export const getPageBySlugSchema = {
         required: ['slug']
     }
 };
-export const getPages = async ({ limit = 10, page = 1, order, formats, include }) => {
+export const getPages = async ({ limit = 10, page = 1, order, formats, include, filter }) => {
     try {
         const params = { limit, page };
         if (order)
@@ -244,6 +285,8 @@ export const getPages = async ({ limit = 10, page = 1, order, formats, include }
             params.formats = formats.join(',');
         if (include?.length)
             params.include = include.join(',');
+        if (filter)
+            params.filter = filter;
         const pages = await ghostApi.pages.browse(params);
         return {
             content: [
@@ -281,6 +324,10 @@ export const getPage = async ({ id, formats, include }) => {
 };
 export const createPage = async (params) => {
     try {
+        // Sanitize HTML content to prevent XSS
+        if (params.html) {
+            params.html = sanitizeHtmlContent(params.html);
+        }
         const page = await ghostApi.pages.add(params);
         return {
             content: [
@@ -297,6 +344,10 @@ export const createPage = async (params) => {
 };
 export const updatePage = async ({ id, ...params }) => {
     try {
+        // Sanitize HTML content to prevent XSS
+        if (params.html) {
+            params.html = sanitizeHtmlContent(params.html);
+        }
         // Get current page info
         const currentPage = await ghostApi.pages.read({ id });
         // Use current updated_at
@@ -347,6 +398,30 @@ export const getPageBySlug = async ({ slug, formats, include }) => {
                 {
                     type: 'text',
                     text: JSON.stringify(page, null, 2),
+                },
+            ],
+        };
+    }
+    catch (error) {
+        throw handleGhostApiError(error);
+    }
+};
+export const searchPages = async ({ query, limit = 10, formats, include }) => {
+    try {
+        const params = {
+            limit,
+            filter: `title:~'${query}'+slug:~'${query}'`
+        };
+        if (formats?.length)
+            params.formats = formats.join(',');
+        if (include?.length)
+            params.include = include.join(',');
+        const pages = await ghostApi.pages.browse(params);
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify(pages, null, 2),
                 },
             ],
         };
