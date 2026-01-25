@@ -7,6 +7,7 @@ import { getPost, getPosts, searchPosts, createPost, updatePost, deletePost, get
 const originalConsoleLog = console.log;
 console.log = (...args) => console.error(...args);
 import { isPaginationParams, isSearchParams, isMemberPaginationParams, isMemberSearchParams, isCreateMemberParams, isUpdateMemberParams, isImageUploadParams, isImageUrlUploadParams } from './types/index.js';
+import { rateLimiter } from './utils/rate-limiter.js';
 const isPostStatus = (value) => ['published', 'draft', 'scheduled'].includes(value);
 const isPostVisibility = (value) => ['public', 'members', 'paid', 'tiers'].includes(value);
 class GhostServer {
@@ -33,6 +34,16 @@ class GhostServer {
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             try {
+                // Rate limiting check
+                const toolName = request.params.name;
+                const rateCheck = rateLimiter.consume(toolName);
+                if (!rateCheck.allowed) {
+                    throw new McpError(
+                        ErrorCode.InvalidRequest,
+                        `Rate limit exceeded for ${rateCheck.category} operations. Retry after ${Math.ceil(rateCheck.retryAfterMs / 1000)} seconds.`
+                    );
+                }
+
                 const args = request.params.arguments || {};
                 switch (request.params.name) {
                     case 'get_posts':

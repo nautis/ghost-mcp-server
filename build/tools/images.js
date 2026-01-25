@@ -6,6 +6,7 @@ import { createGhostApi } from '../config/config.js';
 import { handleGhostApiError } from '../utils/error.js';
 import { isImageUploadParams, isImageUrlUploadParams } from '../types/index.js';
 import { validateUrlForSsrf } from '../utils/url-validator.js';
+import { sanitizeSvg, isSvgContent } from '../utils/svg-sanitizer.js';
 import imageSize from 'image-size';
 // Allowed image formats
 const ALLOWED_FORMATS = {
@@ -82,9 +83,16 @@ export const uploadImage = async (args) => {
     try {
         const { file, purpose, ref } = args;
         // Parse Base64 data to get buffer and MIME type
-        const { buffer, mimeType } = parseBase64Image(file);
+        let { buffer, mimeType } = parseBase64Image(file);
         // Validate image format
         validateImageFormat(buffer, mimeType, purpose);
+
+        // SVG sanitization: strip dangerous elements and attributes
+        if (mimeType === 'image/svg+xml' || isSvgContent(buffer)) {
+            const sanitized = sanitizeSvg(buffer.toString('utf8'));
+            buffer = Buffer.from(sanitized, 'utf8');
+        }
+
         // Build FormData
         const formData = new FormData();
         formData.append('file', buffer, {
@@ -301,11 +309,18 @@ export const uploadImageFromUrl = async (args) => {
                     }]
             };
         }
+        // SVG sanitization: strip dangerous elements and attributes
+        let sanitizedBuffer = buffer;
+        if (mimeType === 'image/svg+xml' || isSvgContent(buffer)) {
+            const sanitized = sanitizeSvg(buffer.toString('utf8'));
+            sanitizedBuffer = Buffer.from(sanitized, 'utf8');
+        }
+
         // Determine filename
         const finalFilename = (filename || extractFilenameFromUrl(url) || generateUuid()) + extension;
         // Build FormData using form-data package (required by @tryghost/admin-api)
         const formData = new FormData();
-        formData.append('file', buffer, {
+        formData.append('file', sanitizedBuffer, {
             filename: finalFilename,
             contentType: mimeType
         });
