@@ -5,6 +5,7 @@ import FormData from 'form-data';
 import { createGhostApi } from '../config/config.js';
 import { handleGhostApiError } from '../utils/error.js';
 import { isImageUploadParams, isImageUrlUploadParams } from '../types/index.js';
+import { validateUrlForSsrf } from '../utils/url-validator.js';
 import imageSize from 'image-size';
 // Allowed image formats
 const ALLOWED_FORMATS = {
@@ -181,6 +182,21 @@ export const uploadImageFromUrl = async (args) => {
         throw new McpError(ErrorCode.InvalidParams, 'Invalid image URL upload parameters');
     }
     const { url, filename, purpose = 'image', ref } = args;
+
+    // SSRF protection: validate URL before fetching
+    const urlValidation = validateUrlForSsrf(url);
+    if (!urlValidation.valid) {
+        return {
+            content: [{
+                type: 'text',
+                text: JSON.stringify({
+                    success: false,
+                    error: `URL blocked: ${urlValidation.reason}`
+                })
+            }]
+        };
+    }
+
     try {
         // Download image with timeout
         const controller = new AbortController();
@@ -220,6 +236,24 @@ export const uploadImageFromUrl = async (args) => {
                     }]
             };
         }
+
+        // SSRF protection: validate final URL after redirects
+        const finalUrl = response.url;
+        if (finalUrl !== url) {
+            const redirectValidation = validateUrlForSsrf(finalUrl);
+            if (!redirectValidation.valid) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: JSON.stringify({
+                            success: false,
+                            error: `Redirect blocked: ${redirectValidation.reason}`
+                        })
+                    }]
+                };
+            }
+        }
+
         // Get buffer from response
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
