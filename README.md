@@ -1,6 +1,6 @@
-# Ghost MCP Server (Featured Image Fork)
+# Ghost MCP Server
 
-A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. This is a fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with additional features.
+A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. Fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with additional features.
 
 ## Features
 
@@ -45,22 +45,19 @@ npm install -g github:nautis/ghost-mcp-server
 
 2. Set the following environment variables:
 
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GHOST_API_URL` | Yes | Your Ghost site URL (e.g., `https://your-ghost-blog.com`) |
+| `GHOST_ADMIN_API_KEY` | Yes | Admin API key from Ghost Integrations |
+| `GHOST_API_VERSION` | No | Ghost API version (default: `v5.0`) |
+| `GHOST_RATE_LIMIT_DISABLED` | No | Set to `true` to disable rate limiting |
+
 ```bash
-# macOS/Linux
 export GHOST_API_URL="https://your-ghost-blog.com"
 export GHOST_ADMIN_API_KEY="your_admin_api_key"
-
-# Windows (PowerShell)
-$env:GHOST_API_URL="https://your-ghost-blog.com"
-$env:GHOST_ADMIN_API_KEY="your_admin_api_key"
 ```
 
-Alternatively, you can create a `.env` file:
-
-```env
-GHOST_API_URL=https://your-ghost-blog.com
-GHOST_ADMIN_API_KEY=your_admin_api_key
-```
+For MCP client configuration, see `.mcp.json.example`.
 
 ## Usage
 
@@ -70,10 +67,12 @@ After installation, start the server with:
 node build/index.js
 ```
 
-Or if installed globally:
+### Development
 
 ```bash
-ghost-mcp-server-featured-image
+npm run dev      # Run with tsx (hot reload)
+npm test         # Run tests
+npm run build    # Compile TypeScript
 ```
 
 ## Content Formats
