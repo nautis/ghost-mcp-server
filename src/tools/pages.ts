@@ -321,6 +321,7 @@ interface UpdatePageParams {
   tags?: string[];
   authors?: string[];
   featured?: boolean;
+  updated_at?: string;
 }
 
 interface DeletePageParams {

@@ -72,6 +72,7 @@ export interface ImageUrlUploadParams {
 }
 
 export interface McpToolResult {
+  [key: string]: unknown;
   content: Array<{ type: 'text'; text: string }>;
 }
 
