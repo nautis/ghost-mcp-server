@@ -1,6 +1,6 @@
 # Ghost MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for the Ghost Admin API. Fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with extended features and security hardening.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for the Ghost Admin API. Originally based on work by [@densh](https://github.com/densh), now independently maintained with extended features and security hardening.
 
 Written in TypeScript. 24 tools. 68 tests.
 
