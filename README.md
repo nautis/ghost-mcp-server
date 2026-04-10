@@ -1,21 +1,27 @@
 # Ghost MCP Server
 
-A Model Context Protocol (MCP) server that integrates with the Ghost Admin API. Fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with additional features.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for the Ghost Admin API. Fork of [@densh/ghost-mcp-server](https://github.com/densh/ghost-mcp-server) with extended features and security hardening.
+
+Written in TypeScript. 24 tools. 68 tests.
 
 ## Features
 
-- Post Management (create, read, update, delete, search)
-- Page Management (create, read, update, delete)
-- Tag Management
-- Author Management
-- Member Management (create, read, update, delete, search)
-- Image Upload (Base64 and URL-based)
+**Content management** - Full CRUD for posts, pages, members, tags, and authors with filtering, sorting, and search.
 
-### Additional Features (this fork)
-- **Featured Image Support** - `feature_image`, `feature_image_alt`, `feature_image_caption`
-- **Custom Excerpt** - `custom_excerpt` field for post summaries
-- **Custom Template** - `custom_template` field for post templates
-- **Fixed update_post** - Properly handles Ghost's optimistic locking
+**Image uploads** - Base64 and URL-based uploads with MIME type detection, dimension validation, and SVG sanitization.
+
+**Security**
+- SSRF protection on URL-based image uploads (blocks private IPs, cloud metadata endpoints, localhost)
+- SVG sanitization (strips script tags, event handlers, javascript: URLs)
+- HTML sanitization via DOMPurify on all content writes
+- Token bucket rate limiting per tool category (read/write/upload/delete)
+
+**This fork adds:**
+- Featured image support (`feature_image`, `feature_image_alt`, `feature_image_caption`)
+- Custom excerpt and template fields
+- Optimistic locking on update operations
+- Advanced query parameters (order, formats, include, filter) on all list/search tools
+- Configurable Ghost API version via environment variable
 
 ## Prerequisites
 
@@ -134,41 +140,69 @@ For simple text without markdown:
 
 **Note:** The `lexical` parameter must be a JSON **string** (use `JSON.stringify()`), not a JSON object.
 
-## Available Tools
+## Available Tools (24)
 
-### get_posts
-Retrieves a list of blog posts.
+### Posts
 
-Input:
-```json
-{
-  "limit": "number", // Optional: Number of posts to retrieve (1-100, default: 10)
-  "page": "number"   // Optional: Page number (default: 1)
-}
-```
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_posts` | List posts with pagination, sorting, filtering | - |
+| `get_post` | Get a post by ID | `id` |
+| `get_post_by_slug` | Get a post by slug | `slug` |
+| `search_posts` | Full-text search posts | `query` |
+| `create_post` | Create a new post | `title` |
+| `update_post` | Update a post (optimistic locking) | `id` |
+| `delete_post` | Delete a post | `id` |
 
-### get_post
-Retrieves a specific post by ID.
+### Pages
 
-Input:
-```json
-{
-  "id": "string" // Required: Post ID
-}
-```
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_pages` | List pages with pagination, sorting, filtering | - |
+| `get_page` | Get a page by ID | `id` |
+| `get_page_by_slug` | Get a page by slug | `slug` |
+| `search_pages` | Search pages by title/slug | `query` |
+| `create_page` | Create a new page | `title` |
+| `update_page` | Update a page (optimistic locking) | `id` |
+| `delete_page` | Delete a page | `id` |
 
-### search_posts
-Searches for posts.
+### Members
 
-Input:
-```json
-{
-  "query": "string", // Required: Search query
-  "limit": "number"  // Optional: Number of posts to retrieve (1-100, default: 10)
-}
-```
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_members` | List members | - |
+| `get_member` | Get a member by ID | `id` |
+| `search_members` | Search members | `query` |
+| `create_member` | Create a member | `email` |
+| `update_member` | Update a member | `id` |
+| `delete_member` | Delete a member | `id` |
 
-### create_post
+### Tags & Authors
+
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_tags` | List tags (with optional post counts) | - |
+| `get_authors` | List authors (with optional post counts) | - |
+
+### Images
+
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `upload_image` | Upload from Base64 data | `file` |
+| `upload_image_from_url` | Download from URL and upload to Ghost | `url` |
+
+### Common optional parameters
+
+Most list and search tools support:
+- `limit` / `page` - Pagination (default: 10 per page)
+- `order` - Sort order (e.g., `published_at DESC`)
+- `formats` - Content formats to return (`html`, `mobiledoc`, `lexical`)
+- `include` - Related data (`authors`, `tags` for posts/pages; `labels`, `newsletters` for members)
+- `filter` - Ghost filter syntax (e.g., `tags.slug:reviews+authors.slug:matthew`)
+
+### Detailed tool reference
+
+#### create_post
 Creates a new post.
 
 Input:
@@ -194,7 +228,7 @@ Input:
 }
 ```
 
-### update_post
+#### update_post
 Updates an existing post.
 
 Input:
@@ -221,67 +255,7 @@ Input:
 }
 ```
 
-### delete_post
-Deletes a post.
-
-Input:
-```json
-{
-  "id": "string" // Required: Post ID
-}
-```
-
-### get_pages
-Retrieves a list of pages.
-
-Input:
-```json
-{
-  "limit": "number",     // Optional: Number of pages to retrieve (1-100, default: 10)
-  "page": "number",      // Optional: Page number (default: 1)
-  "order": "string",     // Optional: Sort order
-  "formats": ["string"], // Optional: Content formats (html/mobiledoc/lexical)
-  "include": ["string"]  // Optional: Related data to include (authors/tags)
-}
-```
-
-### get_members
-Retrieves a list of members.
-
-Input:
-```json
-{
-  "limit": "number",     // Optional: Number of members to retrieve (1-100, default: 10)
-  "page": "number",      // Optional: Page number (default: 1)
-  "order": "string",     // Optional: Sort order
-  "include": ["string"]  // Optional: Related data to include (labels/newsletters)
-}
-```
-
-### search_members
-Searches for members.
-
-Input:
-```json
-{
-  "query": "string",     // Required: Search query
-  "limit": "number",     // Optional: Number of members to retrieve (1-100, default: 10)
-  "include": ["string"]  // Optional: Related data to include (labels/newsletters)
-}
-```
-
-### upload_image
-Uploads an image from Base64 data.
-
-Input:
-```json
-{
-  "file": "string",   // Required: Base64 encoded image data
-  "purpose": "string" // Optional: Image purpose (image/profile_image/icon)
-}
-```
-
-### upload_image_from_url
+#### upload_image_from_url
 Downloads an image from a URL and uploads it to Ghost. Returns the permanent Ghost URL.
 
 Input:
