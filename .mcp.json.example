@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ghost": {
+      "args": ["build/index.js"],
+      "command": "node",
+      "env": {
+        "GHOST_ADMIN_API_KEY": "your-admin-api-key-here",
+        "GHOST_API_URL": "https://your-ghost-site.com",
+        "GHOST_API_VERSION": "v5.0"
+      },
+      "type": "stdio"
+    }
+  }
+}
