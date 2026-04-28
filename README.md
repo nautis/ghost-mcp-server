@@ -2,24 +2,26 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for the Ghost Admin API. Originally based on work by [@densh](https://github.com/densh), now independently maintained with extended features and security hardening.
 
-Written in TypeScript. 24 tools. 68 tests.
+Written in TypeScript. 24 tools. 92 tests.
 
 ## Features
 
 **Content management** - Full CRUD for posts, pages, members, tags, and authors with filtering, sorting, and search.
 
-**Image uploads** - Base64 and URL-based uploads with MIME type detection, dimension validation, and SVG sanitization.
+**Image uploads** - Base64 and URL-based uploads with MIME type detection (header + magic-byte sniff), dimension validation, and SVG sanitization.
 
 **Security**
-- SSRF protection on URL-based image uploads (blocks private IPs, cloud metadata endpoints, localhost)
-- SVG sanitization (strips script tags, event handlers, javascript: URLs)
-- HTML sanitization via DOMPurify on all content writes
-- Token bucket rate limiting per tool category (read/write/upload/delete)
+- **SSRF protection** on URL-based image uploads. Blocks private IPv4 ranges (RFC1918, loopback, link-local + cloud metadata, CGNAT, broadcast, multicast, reserved) and IPv6 ranges (loopback, link-local, unique-local, multicast, IPv4-mapped) using `node:net` `BlockList`. DNS lookup before fetch + per-hop revalidation on redirects (`redirect: 'manual'`, max 3 hops) — closes the rebinding hole that hostname-only validation leaves open.
+- **Filter-string injection guard** on `slug`/`query` parameters. Slugs are validated against `[a-z0-9-]+`; query values are quote-escaped before interpolation into Ghost's NQL filter syntax.
+- **SVG sanitization** via DOMPurify with the SVG profile (parses, doesn't regex). Strips script/foreignObject/iframe, event handlers, `javascript:` URLs, and external `xlink:href`.
+- **HTML sanitization** via DOMPurify on all content writes. Iframes are not in the allowlist — use Ghost's native lexical embed cards for safe embeds. `data:` URIs disallowed.
+- **Streaming image download** with running size cap (no `arrayBuffer`-then-check OOM vector). Server-attested `Content-Type` is verified against magic bytes.
+- **Token bucket rate limiting** per tool category (read/write/upload/delete).
 
 **This fork adds:**
 - Featured image support (`feature_image`, `feature_image_alt`, `feature_image_caption`)
 - Custom excerpt and template fields
-- Optimistic locking on update operations
+- Optimistic locking on update operations via caller-supplied `updated_at` (pass the value from a prior read; Ghost rejects the write if the post has been modified since)
 - Advanced query parameters (order, formats, include, filter) on all list/search tools
 - Configurable Ghost API version via environment variable
 
@@ -251,7 +253,11 @@ Input:
   "email_subject": "string",      // Optional: Email subject line
   "email_only": "boolean",        // Optional: Email-only post
   "newsletter": "boolean",        // Optional: Whether to send email
-  "published_at": "string"        // Optional: Publication date (for scheduled posts)
+  "published_at": "string",       // Optional: Publication date (for scheduled posts)
+  "updated_at": "string"          // Optional: Optimistic-lock token. Pass the
+                                  //   updated_at from a prior read of this post;
+                                  //   Ghost rejects the write if the post has been
+                                  //   modified since. Omit for last-write-wins.
 }
 ```
 
