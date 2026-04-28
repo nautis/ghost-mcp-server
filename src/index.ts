@@ -168,7 +168,7 @@ class GhostServer {
               id, title, html, lexical, status, visibility, published_at,
               tags, authors, featured, email_subject, email_only, newsletter,
               feature_image, feature_image_alt, feature_image_caption,
-              custom_excerpt, custom_template,
+              custom_excerpt, custom_template, updated_at,
             } = args;
             if (typeof id !== 'string') {
               throw new McpError(ErrorCode.InvalidParams, 'ID must be a string');
@@ -192,6 +192,7 @@ class GhostServer {
               feature_image_caption: typeof feature_image_caption === 'string' ? feature_image_caption : undefined,
               custom_excerpt: typeof custom_excerpt === 'string' ? custom_excerpt : undefined,
               custom_template: typeof custom_template === 'string' ? custom_template : undefined,
+              updated_at: typeof updated_at === 'string' ? updated_at : undefined,
             });
           }
 
@@ -258,7 +259,7 @@ class GhostServer {
           case 'update_page': {
             const {
               id, title, html, lexical, status, visibility, published_at,
-              tags, authors, featured,
+              tags, authors, featured, updated_at,
             } = args;
             if (typeof id !== 'string') {
               throw new McpError(ErrorCode.InvalidParams, 'ID must be a string');
@@ -274,7 +275,7 @@ class GhostServer {
               tags: Array.isArray(tags) ? tags.filter((t: unknown) => typeof t === 'string') : undefined,
               authors: Array.isArray(authors) ? authors.filter((a: unknown) => typeof a === 'string') : undefined,
               featured: typeof featured === 'boolean' ? featured : undefined,
-              updated_at: new Date().toISOString(),
+              updated_at: typeof updated_at === 'string' ? updated_at : undefined,
             });
           }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateUrlForSsrf } from './url-validator.js';
+import { validateUrlForSsrf, resolveAndValidate } from './url-validator.js';
 
 describe('validateUrlForSsrf', () => {
   it('allows public HTTPS URLs', () => {
@@ -86,5 +86,64 @@ describe('validateUrlForSsrf', () => {
     const result = validateUrlForSsrf('not-a-url');
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('Invalid URL');
+  });
+
+  // Coverage for IPv6 forms previously bypassed by the regex-based validator.
+  it('blocks IPv6 loopback ::1', () => {
+    expect(validateUrlForSsrf('http://[::1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv4-mapped IPv6 (dotted-quad form)', () => {
+    expect(validateUrlForSsrf('http://[::ffff:127.0.0.1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv4-mapped IPv6 (compressed-hex form)', () => {
+    expect(validateUrlForSsrf('http://[::ffff:7f00:1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv6 link-local fe80::/10', () => {
+    expect(validateUrlForSsrf('http://[fe80::1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv6 unique-local fc00::/7', () => {
+    expect(validateUrlForSsrf('http://[fc00::1]/').valid).toBe(false);
+    expect(validateUrlForSsrf('http://[fd12:3456::1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv6 multicast ff00::/8', () => {
+    expect(validateUrlForSsrf('http://[ff00::1]/').valid).toBe(false);
+  });
+
+  it('blocks IPv4 numeric integer form', () => {
+    // Node's URL parser normalizes 2130706433 -> 127.0.0.1
+    expect(validateUrlForSsrf('http://2130706433/').valid).toBe(false);
+  });
+
+  it('blocks IPv4 multicast', () => {
+    expect(validateUrlForSsrf('http://224.0.0.1/').valid).toBe(false);
+  });
+});
+
+describe('resolveAndValidate', () => {
+  it('blocks DNS rebinding via hostname resolution', async () => {
+    // localhost should resolve to 127.0.0.1; the sync layer also blocks it
+    // by name, but this confirms the DNS resolution path engages.
+    const r = await resolveAndValidate('http://localhost/');
+    expect(r.valid).toBe(false);
+  });
+
+  it('rejects URLs whose hostname fails DNS resolution', async () => {
+    const r = await resolveAndValidate('http://this-host-shouldnt-exist-zzz.example/');
+    expect(r.valid).toBe(false);
+    expect(r.reason?.toLowerCase()).toMatch(/dns|resolv|not found|enotfound|eai_again/i);
+  });
+
+  it('returns resolved addresses for valid public hosts', async () => {
+    // Use an IP literal to avoid relying on external DNS in CI.
+    const r = await resolveAndValidate('http://1.1.1.1/');
+    expect(r.valid).toBe(true);
+    expect(r.addresses).toBeDefined();
+    expect(r.addresses!.length).toBeGreaterThan(0);
+    expect(r.addresses![0].address).toBe('1.1.1.1');
   });
 });

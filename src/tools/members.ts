@@ -2,7 +2,11 @@ import { handleGhostApiError } from '../utils/error.js';
 import { createGhostApi } from '../config/config.js';
 import type { McpToolResult } from '../types/index.js';
 
-const ghostApi = createGhostApi();
+let _ghostApi: ReturnType<typeof createGhostApi> | null = null;
+function ghostApi() {
+  if (!_ghostApi) _ghostApi = createGhostApi();
+  return _ghostApi;
+}
 
 // Schemas
 
@@ -246,7 +250,7 @@ export const getMembers = async ({
     if (order) params.order = order;
     if (include?.length) params.include = include.join(',');
 
-    const members = await ghostApi.members.browse(params);
+    const members = await ghostApi().members.browse(params);
     return {
       content: [
         {
@@ -268,7 +272,7 @@ export const getMember = async ({
     const params: Record<string, unknown> = { id };
     if (include?.length) params.include = include.join(',');
 
-    const member = await ghostApi.members.read(params);
+    const member = await ghostApi().members.read(params);
     return {
       content: [
         {
@@ -291,7 +295,7 @@ export const searchMembers = async ({
     const params: Record<string, unknown> = { limit, search: query };
     if (include?.length) params.include = include.join(',');
 
-    const members = await ghostApi.members.browse(params);
+    const members = await ghostApi().members.browse(params);
     return {
       content: [
         {
@@ -309,7 +313,7 @@ export const createMember = async (
   params: CreateMemberParams
 ): Promise<McpToolResult> => {
   try {
-    const member = await ghostApi.members.add(params);
+    const member = await ghostApi().members.add(params);
     return {
       content: [
         {
@@ -328,7 +332,7 @@ export const updateMember = async ({
   ...params
 }: UpdateMemberParams): Promise<McpToolResult> => {
   try {
-    const member = await ghostApi.members.edit({ id, ...params });
+    const member = await ghostApi().members.edit({ id, ...params });
     return {
       content: [
         {
@@ -346,7 +350,7 @@ export const deleteMember = async ({
   id,
 }: DeleteMemberParams): Promise<McpToolResult> => {
   try {
-    await ghostApi.members.delete({ id });
+    await ghostApi().members.delete({ id });
     return {
       content: [
         {
