@@ -1,9 +1,17 @@
 import { handleGhostApiError } from '../utils/error.js';
 import { createGhostApi } from '../config/config.js';
 import { sanitizeHtmlContent } from '../utils/sanitize.js';
+import { escapeFilterValue, validateSlug } from '../utils/filter.js';
 import type { McpToolResult } from '../types/index.js';
 
-const ghostApi = createGhostApi();
+// Lazy-init: don't construct the Ghost client at module-import time, so the
+// MCP server can start cleanly and report a real InvalidParams error if env
+// vars are missing rather than throwing during the import phase.
+let _ghostApi: ReturnType<typeof createGhostApi> | null = null;
+function ghostApi() {
+  if (!_ghostApi) _ghostApi = createGhostApi();
+  return _ghostApi;
+}
 
 // Schemas
 
@@ -259,6 +267,11 @@ export const updatePostSchema = {
         type: 'string',
         description: 'Custom template name (e.g., custom-post-fullwidth)',
       },
+      updated_at: {
+        type: 'string',
+        description:
+          "Optimistic-lock token. Pass the `updated_at` from a prior read of this post; Ghost rejects the write if the post has been modified since. If omitted, the server fetches the latest updated_at and writes (last-write-wins).",
+      },
     },
     required: ['id'],
   },
@@ -416,6 +429,11 @@ interface UpdatePostParams {
   feature_image_caption?: string;
   custom_excerpt?: string;
   custom_template?: string;
+  // Caller-supplied optimistic-lock token. Set this to the `updated_at` value
+  // returned by an earlier read of the same post. Ghost rejects the write if
+  // the post has been modified since. If omitted, no optimistic check is
+  // performed (caller takes responsibility for last-write-wins).
+  updated_at?: string;
 }
 
 interface DeletePostParams {
@@ -445,7 +463,7 @@ export const getPosts = async ({
     if (include?.length) params.include = include.join(',');
     if (filter) params.filter = filter;
 
-    const posts = await ghostApi.posts.browse(params);
+    const posts = await ghostApi().posts.browse(params);
     return {
       content: [
         {
@@ -469,7 +487,7 @@ export const getPost = async ({
     if (formats?.length) params.formats = formats.join(',');
     if (include?.length) params.include = include.join(',');
 
-    const post = await ghostApi.posts.read(params);
+    const post = await ghostApi().posts.read(params);
     return {
       content: [
         {
@@ -496,7 +514,7 @@ export const searchPosts = async ({
     if (include?.length) params.include = include.join(',');
     if (filter) params.filter = filter;
 
-    const posts = await ghostApi.posts.browse(params);
+    const posts = await ghostApi().posts.browse(params);
     return {
       content: [
         {
@@ -520,7 +538,7 @@ export const createPost = async (
     }
     // If html is provided, use source: 'html' to tell Ghost to convert it
     const options = params.html ? { source: 'html' } : {};
-    const post = await ghostApi.posts.add(params, options);
+    const post = await ghostApi().posts.add(params, options);
     return {
       content: [
         {
@@ -543,16 +561,17 @@ export const updatePost = async ({
     if (params.html) {
       params.html = sanitizeHtmlContent(params.html);
     }
-    // Fetch current post to get updated_at for optimistic locking
-    const currentPost = await ghostApi.posts.read({ id });
-    const updateParams: Record<string, unknown> = {
-      id,
-      ...params,
-      updated_at: currentPost.updated_at,
-    };
-    // If html is provided, use source: 'html' to tell Ghost to convert it
+    // Optimistic locking: pass the caller-supplied `updated_at` straight
+    // through to Ghost. If absent, fall back to a fresh read (last-write-wins).
+    // The previous version always re-read and overrode, which silently
+    // defeated the lock under concurrency.
+    const updateParams: Record<string, unknown> = { id, ...params };
+    if (!params.updated_at) {
+      const currentPost = await ghostApi().posts.read({ id });
+      updateParams.updated_at = currentPost.updated_at;
+    }
     const options = params.html ? { source: 'html' } : {};
-    const post = await ghostApi.posts.edit(updateParams, options);
+    const post = await ghostApi().posts.edit(updateParams, options);
     return {
       content: [
         {
@@ -570,7 +589,7 @@ export const deletePost = async ({
   id,
 }: DeletePostParams): Promise<McpToolResult> => {
   try {
-    await ghostApi.posts.delete({ id });
+    await ghostApi().posts.delete({ id });
     return {
       content: [
         {
@@ -590,11 +609,14 @@ export const getPostBySlug = async ({
   include,
 }: GetPostBySlugParams): Promise<McpToolResult> => {
   try {
-    const params: Record<string, unknown> = { filter: `slug:${slug}` };
+    // Validate slug shape — Ghost slugs are [a-z0-9-]; anything else is either
+    // garbage or a filter-injection attempt (`x'+visibility:paid+y:'`).
+    validateSlug(slug);
+    const params: Record<string, unknown> = { filter: `slug:'${escapeFilterValue(slug)}'` };
     if (formats?.length) params.formats = formats.join(',');
     if (include?.length) params.include = include.join(',');
 
-    const [post] = await ghostApi.posts.browse(params);
+    const [post] = await ghostApi().posts.browse(params);
     if (!post) {
       throw new Error(`Post with slug "${slug}" not found`);
     }

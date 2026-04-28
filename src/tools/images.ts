@@ -2,13 +2,25 @@
 // ABOUTME: Supports both base64 uploads and direct URL-to-Ghost transfers.
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import FormData from 'form-data';
+import { randomUUID } from 'node:crypto';
 import { createGhostApi } from '../config/config.js';
 import { handleGhostApiError } from '../utils/error.js';
 import { isImageUploadParams, isImageUrlUploadParams } from '../types/index.js';
 import type { McpToolResult, ImagePurpose } from '../types/index.js';
-import { validateUrlForSsrf } from '../utils/url-validator.js';
+import { resolveAndValidate } from '../utils/url-validator.js';
 import { sanitizeSvg, isSvgContent } from '../utils/svg-sanitizer.js';
 import imageSize from 'image-size';
+
+// Lazy-init Ghost API client (see posts.ts).
+let _ghostApi: ReturnType<typeof createGhostApi> | null = null;
+function ghostApi() {
+  if (!_ghostApi) _ghostApi = createGhostApi();
+  return _ghostApi;
+}
+
+// Maximum redirect hops on a URL image download. Each hop is independently
+// SSRF-validated.
+const MAX_REDIRECTS = 3;
 
 // Allowed image formats
 const ALLOWED_FORMATS: Record<string, string[]> = {
@@ -128,14 +140,10 @@ const extractFilenameFromUrl = (url: string): string | null => {
   }
 };
 
-// Generate a simple UUID-like string
-const generateUuid = (): string => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
+// Generate a UUID using node:crypto. The previous Math.random() variant was
+// not unpredictable; for filenames this isn't security-critical but stronger
+// entropy avoids collisions under bursty uploads.
+const generateUuid = (): string => randomUUID();
 
 // Detect MIME type from buffer using magic bytes
 const detectMimeFromBuffer = (buffer: Buffer): string | null => {
@@ -303,11 +311,8 @@ export const uploadImage = async (args: unknown): Promise<McpToolResult | Return
     if (purpose) formData.append('purpose', purpose);
     if (ref) formData.append('ref', ref);
 
-    // Create Ghost Admin API client
-    const api = createGhostApi();
-
     // Send image upload request
-    const response = await api.images.upload({
+    const response = await ghostApi().images.upload({
       file: formData,
       purpose,
       ref,
@@ -337,33 +342,76 @@ export const uploadImageFromUrl = async (
   const { url, filename, purpose = 'image', ref } =
     args as UploadImageFromUrlArgs;
 
-  // SSRF protection: validate URL before fetching
-  const urlValidation = validateUrlForSsrf(url);
-  if (!urlValidation.valid) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: false,
-            error: `URL blocked: ${urlValidation.reason}`,
-          }),
-        },
-      ],
-    };
-  }
-
   try {
-    // Download image with timeout
+    // Manual redirect handling with per-hop SSRF revalidation. Each hop is
+    // (a) DNS-resolved via resolveAndValidate (closes the rebinding hole that
+    // hostname-only validation leaves open) and (b) checked against the
+    // private-IP blocklist for every returned address.
+    let currentUrl = url;
+    let response: Response;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
 
-    let response: Response;
     try {
-      response = await fetch(url, {
-        signal: controller.signal,
-        redirect: 'follow',
-      });
+      // eslint-disable-next-line no-constant-condition
+      let hop = 0;
+      while (true) {
+        const validation = await resolveAndValidate(currentUrl);
+        if (!validation.valid) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: hop === 0
+                    ? `URL blocked: ${validation.reason}`
+                    : `Redirect blocked: ${validation.reason}`,
+                }),
+              },
+            ],
+          };
+        }
+
+        response = await fetch(currentUrl, {
+          signal: controller.signal,
+          redirect: 'manual',
+        });
+
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (!location) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: false,
+                    error: `Redirect with no Location header (${response.status})`,
+                  }),
+                },
+              ],
+            };
+          }
+          if (++hop > MAX_REDIRECTS) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: false,
+                    error: `Too many redirects (>${MAX_REDIRECTS})`,
+                  }),
+                },
+              ],
+            };
+          }
+          currentUrl = new URL(location, currentUrl).toString();
+          continue;
+        }
+
+        break;
+      }
     } catch (error: unknown) {
       const err = error as Error;
       if (err.name === 'AbortError') {
@@ -398,43 +446,51 @@ export const uploadImageFromUrl = async (
       };
     }
 
-    // SSRF protection: validate final URL after redirects
-    const finalUrl = response.url;
-    if (finalUrl !== url) {
-      const redirectValidation = validateUrlForSsrf(finalUrl);
-      if (!redirectValidation.valid) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: `Redirect blocked: ${redirectValidation.reason}`,
-              }),
-            },
-          ],
-        };
-      }
-    }
-
-    // Get buffer from response
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Check file size
-    if (buffer.length > MAX_URL_FILE_SIZE) {
+    // Stream the body with a running size cap. Don't trust Content-Length —
+    // a server can lie about it or omit it entirely. The previous version
+    // called response.arrayBuffer() and only checked size after the whole
+    // payload was buffered, which is an OOM vector.
+    const reader = response.body?.getReader();
+    if (!reader) {
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: `File size (${(buffer.length / 1024 / 1024).toFixed(2)}MB) exceeds maximum limit of ${MAX_URL_FILE_SIZE / 1024 / 1024}MB`,
-            }),
+            text: JSON.stringify({ success: false, error: 'Response body is empty' }),
           },
         ],
       };
     }
+
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > MAX_URL_FILE_SIZE) {
+          await reader.cancel();
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: `File size exceeds maximum limit of ${MAX_URL_FILE_SIZE / 1024 / 1024}MB`,
+                }),
+              },
+            ],
+          };
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
+
+    const buffer = Buffer.concat(chunks);
 
     // Detect MIME type from headers or magic bytes
     let mimeType: string | null =
@@ -484,9 +540,10 @@ export const uploadImageFromUrl = async (
       sanitizedBuffer = Buffer.from(sanitized, 'utf8');
     }
 
-    // Determine filename
+    // Determine filename — use the redirected URL if redirects occurred so
+    // the filename reflects the actual source rather than the original URL.
     const finalFilename =
-      (filename || extractFilenameFromUrl(url) || generateUuid()) + extension;
+      (filename || extractFilenameFromUrl(currentUrl) || generateUuid()) + extension;
 
     // Build FormData using form-data package (required by @tryghost/admin-api)
     const formData = new FormData();
@@ -497,11 +554,8 @@ export const uploadImageFromUrl = async (
     formData.append('purpose', purpose);
     if (ref) formData.append('ref', ref);
 
-    // Create Ghost Admin API client
-    const api = createGhostApi();
-
     // Upload to Ghost - pass FormData directly, not wrapped in an object
-    const uploadResponse = await api.images.upload(formData);
+    const uploadResponse = await ghostApi().images.upload(formData);
 
     return {
       content: [

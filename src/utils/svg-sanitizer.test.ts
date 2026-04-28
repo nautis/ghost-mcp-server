@@ -62,7 +62,15 @@ describe('sanitizeSvg', () => {
   it('preserves safe SVG content', () => {
     const input = '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="red"/></svg>';
     const result = sanitizeSvg(input);
-    expect(result).toBe(input);
+    // DOMPurify normalizes self-closing tags (<circle .../> -> <circle ...></circle>),
+    // so we check semantic preservation rather than byte-identical output.
+    expect(result).toContain('viewBox="0 0 100 100"');
+    expect(result).toContain('<circle');
+    expect(result).toContain('cx="50"');
+    expect(result).toContain('cy="50"');
+    expect(result).toContain('r="40"');
+    expect(result).toContain('fill="red"');
+    expect(result).toContain('</svg>');
   });
 });
 

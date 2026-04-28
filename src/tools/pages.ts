@@ -1,9 +1,14 @@
 import { handleGhostApiError } from '../utils/error.js';
 import { createGhostApi } from '../config/config.js';
 import { sanitizeHtmlContent } from '../utils/sanitize.js';
+import { escapeFilterValue, validateSlug } from '../utils/filter.js';
 import type { McpToolResult } from '../types/index.js';
 
-const ghostApi = createGhostApi();
+let _ghostApi: ReturnType<typeof createGhostApi> | null = null;
+function ghostApi() {
+  if (!_ghostApi) _ghostApi = createGhostApi();
+  return _ghostApi;
+}
 
 // Schemas
 
@@ -193,6 +198,11 @@ export const updatePageSchema = {
         type: 'boolean',
         description: 'Set as featured page',
       },
+      updated_at: {
+        type: 'string',
+        description:
+          "Optimistic-lock token. Pass the `updated_at` from a prior read of this page; Ghost rejects the write if the page has been modified since. If omitted, the server fetches the latest updated_at and writes (last-write-wins).",
+      },
     },
     required: ['id'],
   },
@@ -321,6 +331,7 @@ interface UpdatePageParams {
   tags?: string[];
   authors?: string[];
   featured?: boolean;
+  // Caller-supplied optimistic-lock token. See updatePost.
   updated_at?: string;
 }
 
@@ -358,7 +369,7 @@ export const getPages = async ({
     if (include?.length) params.include = include.join(',');
     if (filter) params.filter = filter;
 
-    const pages = await ghostApi.pages.browse(params);
+    const pages = await ghostApi().pages.browse(params);
     return {
       content: [
         {
@@ -382,7 +393,7 @@ export const getPage = async ({
     if (formats?.length) params.formats = formats.join(',');
     if (include?.length) params.include = include.join(',');
 
-    const page = await ghostApi.pages.read(params);
+    const page = await ghostApi().pages.read(params);
     return {
       content: [
         {
@@ -404,7 +415,7 @@ export const createPage = async (
     if (params.html) {
       params.html = sanitizeHtmlContent(params.html);
     }
-    const page = await ghostApi.pages.add(params);
+    const page = await ghostApi().pages.add(params);
     return {
       content: [
         {
@@ -423,19 +434,17 @@ export const updatePage = async ({
   ...params
 }: UpdatePageParams): Promise<McpToolResult> => {
   try {
-    // Sanitize HTML content to prevent XSS
     if (params.html) {
       params.html = sanitizeHtmlContent(params.html);
     }
-    // Get current page info
-    const currentPage = await ghostApi.pages.read({ id });
-    // Use current updated_at
-    const updateParams: Record<string, unknown> = {
-      id,
-      ...params,
-      updated_at: currentPage.updated_at || new Date().toISOString(),
-    };
-    const page = await ghostApi.pages.edit(updateParams);
+    // See updatePost — caller-supplied updated_at preferred; fall back to
+    // fresh-read last-write-wins if absent.
+    const updateParams: Record<string, unknown> = { id, ...params };
+    if (!params.updated_at) {
+      const currentPage = await ghostApi().pages.read({ id });
+      updateParams.updated_at = currentPage.updated_at;
+    }
+    const page = await ghostApi().pages.edit(updateParams);
     return {
       content: [
         {
@@ -453,7 +462,7 @@ export const deletePage = async ({
   id,
 }: DeletePageParams): Promise<McpToolResult> => {
   try {
-    await ghostApi.pages.delete({ id });
+    await ghostApi().pages.delete({ id });
     return {
       content: [
         {
@@ -473,11 +482,12 @@ export const getPageBySlug = async ({
   include,
 }: GetPageBySlugParams): Promise<McpToolResult> => {
   try {
-    const params: Record<string, unknown> = { filter: `slug:${slug}` };
+    validateSlug(slug);
+    const params: Record<string, unknown> = { filter: `slug:'${escapeFilterValue(slug)}'` };
     if (formats?.length) params.formats = formats.join(',');
     if (include?.length) params.include = include.join(',');
 
-    const [page] = await ghostApi.pages.browse(params);
+    const [page] = await ghostApi().pages.browse(params);
     if (!page) {
       throw new Error(`Page with slug "${slug}" not found`);
     }
@@ -501,14 +511,18 @@ export const searchPages = async ({
   include,
 }: SearchPagesParams): Promise<McpToolResult> => {
   try {
+    // Escape the query value before interpolating into the Ghost filter DSL.
+    // Without this, a query like `x'+visibility:paid+y:'` would break out of
+    // the title:~ scope and OR-in arbitrary filters.
+    const escaped = escapeFilterValue(query);
     const params: Record<string, unknown> = {
       limit,
-      filter: `title:~'${query}'+slug:~'${query}'`,
+      filter: `title:~'${escaped}',slug:~'${escaped}'`,
     };
     if (formats?.length) params.formats = formats.join(',');
     if (include?.length) params.include = include.join(',');
 
-    const pages = await ghostApi.pages.browse(params);
+    const pages = await ghostApi().pages.browse(params);
     return {
       content: [
         {
