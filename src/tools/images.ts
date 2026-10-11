@@ -215,7 +215,8 @@ export const uploadImageSchema = {
     properties: {
       file: {
         type: 'string',
-        description: 'Image file to upload (Base64)',
+        description:
+          'Image data URI: data:image/webp;base64,... (maximum decoded size 2 MB)',
       },
       purpose: {
         type: 'string',
@@ -288,7 +289,7 @@ export const uploadImage = async (args: unknown): Promise<McpToolResult | Return
   }
 
   try {
-    const { file, purpose, ref } = args as UploadImageArgs;
+    const { file, purpose = 'image', ref } = args as UploadImageArgs;
 
     // Parse Base64 data to get buffer and MIME type
     let { buffer, mimeType } = parseBase64Image(file);
@@ -312,18 +313,19 @@ export const uploadImage = async (args: unknown): Promise<McpToolResult | Return
     if (ref) formData.append('ref', ref);
 
     // Send image upload request
-    const response = await ghostApi().images.upload({
-      file: formData,
-      purpose,
-      ref,
-    });
+    const response = await ghostApi().images.upload(formData);
 
     return {
-      content: {
-        url: response.url,
-        ref: response.ref,
-      },
-    } as unknown as McpToolResult;
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            url: response.url,
+            ref: response.ref,
+          }),
+        },
+      ],
+    };
   } catch (error) {
     return handleGhostApiError(error);
   }
